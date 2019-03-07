@@ -15,6 +15,11 @@ public class ReferenceSearchWindow : EditorWindow
     /// このオブジェクトを参照しているオブジェクトを検索する
     /// </summary>
     Object searchObject;
+
+    /// <summary>
+    /// searchObject への参照を置き換える参照
+    /// </summary>
+    Object replaceReference;
     Vector2 scrollPosition;
 
     /// <summary>
@@ -54,6 +59,28 @@ public class ReferenceSearchWindow : EditorWindow
         }
 
         searchObject = EditorGUILayout.ObjectField("Search Object", searchObject, typeof(Object), true);
+
+        replaceReference = EditorGUILayout.ObjectField("Replace Reference", replaceReference, typeof(Object), true);
+
+        if (GUILayout.Button("Replace")) {
+            var gameObjects = FindObjectsOfType<GameObject>();
+            foreach (var gameObject in gameObjects) {
+                foreach (var component in gameObject.GetComponents<MonoBehaviour>()) {
+                    var serializedObject = new SerializedObject(component);
+                    var iterator = serializedObject.GetIterator();
+                    iterator.Next(true);
+                    while (iterator.Next(true)) {
+                        if (iterator.propertyType == SerializedPropertyType.ObjectReference) {
+                            if (iterator.objectReferenceValue == searchObject &&
+                                iterator.objectReferenceValue != gameObject) {
+                                iterator.objectReferenceValue = replaceReference;
+                            }
+                        }
+                    }
+                    serializedObject.ApplyModifiedProperties();
+                }
+            }
+        }
         drawSeparator();
 
         using (var scrollViewScope = new EditorGUILayout.ScrollViewScope(scrollPosition)) {
