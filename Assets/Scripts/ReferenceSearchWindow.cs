@@ -101,7 +101,7 @@ public class ReferenceSearchWindow : EditorWindow
 
     void updateSearch()
     {
-        var gameObjects = FindObjectsOfType<GameObject>();
+        var gameObjects = Resources.FindObjectsOfTypeAll<GameObject>();
         hitGameObjects.Clear();
         foreach (var gameObject in gameObjects) {
             foreach (var component in gameObject.GetComponents<MonoBehaviour>()) {
@@ -110,7 +110,8 @@ public class ReferenceSearchWindow : EditorWindow
                 iterator.Next(true);
                 while (iterator.Next(true)) {
                     if (iterator.propertyType == SerializedPropertyType.ObjectReference) {
-                        if (iterator.objectReferenceValue == searchObject &&
+                        if (gameObject.scene.isLoaded &&
+							iterator.objectReferenceValue == searchObject &&
                             iterator.objectReferenceValue != gameObject) {
                             hitGameObjects.Add(gameObject);
                         }
