@@ -2,6 +2,7 @@
 using System.Collections.Generic;
 using UnityEngine;
 using UnityEditor;
+using System.Linq;
 
 public class ReferenceSearchWindow : EditorWindow
 {
@@ -22,10 +23,17 @@ public class ReferenceSearchWindow : EditorWindow
     Object replaceReference;
     Vector2 scrollPosition;
 
+	class SearchHitInfo
+	{
+		public GameObject hitGameObject;
+		public Object referencedObject;
+		public string hitProperty;
+	}
+
     /// <summary>
     ///  検索にヒットしたゲームオブジェクトのリスト
     /// </summary>
-    List<GameObject> hitGameObjects = new List<GameObject>();
+    List<SearchHitInfo> hitInfoList = new List<SearchHitInfo>();
 
     /// <summary>
     /// エディタの状態追跡用
@@ -36,16 +44,12 @@ public class ReferenceSearchWindow : EditorWindow
     {
         // ウインドウタイトル変更
         titleContent = new GUIContent("Reference Search");
-
-        EditorApplication.hierarchyChanged += () => {
-            updateSearch();
-        };
+		updateSearch();
     }
 
     void OnInspectorUpdate()
     {
         if (!!tracker.isDirty) {
-            updateSearch();
             Repaint();
         }
     }
@@ -58,11 +62,16 @@ public class ReferenceSearchWindow : EditorWindow
             break;
         }
 
-        searchObject = EditorGUILayout.ObjectField("Search Object", searchObject, typeof(Object), true);
+		using (var changeScope = new EditorGUI.ChangeCheckScope()) {
+			searchObject = EditorGUILayout.ObjectField("Search Object", searchObject, typeof(Object), true);
+			replaceReference = EditorGUILayout.ObjectField("Replace Reference", replaceReference, typeof(Object), true);
 
-        replaceReference = EditorGUILayout.ObjectField("Replace Reference", replaceReference, typeof(Object), true);
+			if (!!changeScope.changed) {
+				updateSearch();
+			}
+		}
 
-        if (GUILayout.Button("Replace")) {
+		if (GUILayout.Button("Replace")) {
             var gameObjects = FindObjectsOfType<GameObject>();
             foreach (var gameObject in gameObjects) {
                 foreach (var component in gameObject.GetComponents<MonoBehaviour>()) {
@@ -86,23 +95,32 @@ public class ReferenceSearchWindow : EditorWindow
         using (var scrollViewScope = new EditorGUILayout.ScrollViewScope(scrollPosition)) {
             if (!!searchObject) {
 
-                foreach (var hitGameObject in hitGameObjects) {
-                    var content = EditorGUIUtility.ObjectContent(hitGameObject, typeof(GameObject));
-                    if (GUILayout.Button(content, EditorStyles.label, GUILayout.Height(EditorGUIUtility.singleLineHeight))) {
-                        EditorGUIUtility.PingObject(hitGameObject);
-                        Selection.activeGameObject = hitGameObject;
-                    }
-                }
+                foreach (var hitInfo in hitInfoList) {
+                    var content = EditorGUIUtility.ObjectContent(hitInfo.referencedObject, typeof(GameObject));
+
+					using (var horizontal = new EditorGUILayout.HorizontalScope()) {
+						if (GUILayout.Button(content, EditorStyles.label, GUILayout.Height(EditorGUIUtility.singleLineHeight), GUILayout.Width(Screen.width / 2.0f - 6.0f))) {
+							EditorGUIUtility.PingObject(hitInfo.hitGameObject);
+							Selection.activeGameObject = hitInfo.hitGameObject;
+						}
+
+						EditorGUILayout.TextArea(hitInfo.hitProperty, GUILayout.Width(Screen.width / 2.0f - 6.0f));
+					}
+				}
             }
 
             scrollPosition = scrollViewScope.scrollPosition;
         }
-    }
+
+		if (GUILayout.Button("Refresh")) {
+			updateSearch();
+		}
+	}
 
     void updateSearch()
     {
         var gameObjects = Resources.FindObjectsOfTypeAll<GameObject>();
-        hitGameObjects.Clear();
+        hitInfoList.Clear();
         foreach (var gameObject in gameObjects) {
             foreach (var component in gameObject.GetComponents<MonoBehaviour>()) {
                 var serializedObject = new SerializedObject(component);
@@ -111,9 +129,13 @@ public class ReferenceSearchWindow : EditorWindow
                 while (iterator.Next(true)) {
                     if (iterator.propertyType == SerializedPropertyType.ObjectReference) {
                         if (gameObject.scene.isLoaded &&
-							iterator.objectReferenceValue == searchObject &&
-                            iterator.objectReferenceValue != gameObject) {
-                            hitGameObjects.Add(gameObject);
+							(iterator.objectReferenceValue == searchObject || ((searchObject is GameObject) && ((GameObject)searchObject).GetComponents<MonoBehaviour>().Any(item => item == iterator.objectReferenceValue))) && // GameObjectの場合は、アタッチされているコンポーネントも検索対象に含める
+							searchObject != gameObject) {
+							var hitInfo = new SearchHitInfo();
+							hitInfo.hitGameObject = gameObject;
+							hitInfo.referencedObject = iterator.objectReferenceValue;
+							hitInfo.hitProperty = iterator.name;
+							hitInfoList.Add(hitInfo);
                         }
                     }
                 }

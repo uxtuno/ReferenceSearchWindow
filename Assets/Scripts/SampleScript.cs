@@ -5,5 +5,9 @@ using UnityEngine;
 public class SampleScript : MonoBehaviour
 {
     [SerializeField]
-    GameObject Reference;
+    SampleScript Reference;
+
+	[SerializeField]
+	GameObject Reference2;
+
 }
